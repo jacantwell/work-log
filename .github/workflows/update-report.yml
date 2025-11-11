@@ -1,0 +1,58 @@
+name: Update Accomplishment Report
+
+on:
+  schedule:
+    # Runs at 00:00 UTC on the first day of each month
+    - cron: '0 0 1 * *'
+  workflow_dispatch: # Allows manual triggering
+
+jobs:
+  update-report:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout report repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.ACCESS_TOKEN }}
+      
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+      
+      - name: Clone git-log tool
+        run: |
+          git clone https://github.com/jacantwell/git-log.git tool
+          cd tool
+      
+      - name: Install dependencies
+        working-directory: ./tool
+        run: go mod download
+      
+      - name: Create config directory
+        working-directory: ./tool
+        run: mkdir -p config
+      
+      - name: Run report generator
+        working-directory: ./tool
+        env:
+          ACCESS_TOKEN: ${{ secrets.ACCESS_TOKEN }}
+          USERNAME: 'jacantwell'
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          DAYS: '30'
+          MODEL: 'gemini-2.5-flash'
+          REPORT_PATH: '../report.md'
+        run: |
+          # Update config to point to the report in parent directory
+          go run ./cmd/main.go
+      
+      - name: Commit and push if changed
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "actions@github.com"
+          git add report.md
+          git diff --quiet && git diff --staged --quiet || (
+            git commit -m "Update accomplishment report - $(date +'%Y-%m')"
+            git push
+          )
